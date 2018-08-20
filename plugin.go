@@ -1,15 +1,16 @@
 package sites
 
 import (
+	"github.com/aghape/aghape"
 	"github.com/aghape/db"
 	"github.com/aghape/plug"
-	"github.com/aghape/aghape"
 )
 
 var E_INIT_SITE = PREFIX + ".init.site"
 
 type Plugin struct {
-	db.DisDBNames
+	db.DBNames
+	plug.EventDispatcher
 	ContextFactoryKey, SitesRouterKey, SitesReaderKey string
 }
 
@@ -102,5 +103,3 @@ func (p *Plugin) OnRegister() {
 	p.On(db.E_MIGRATE_DB, p.doDB(db.EMigrate))
 	p.On(db.E_MIGRATE_GORM, p.doGorm(db.EMigrateGorm))
 }
-
-
