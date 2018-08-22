@@ -5,15 +5,15 @@ import (
 	"strings"
 
 	"github.com/moisespsena/go-error-wrap"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 	"github.com/spf13/cobra"
 )
 
 type CmdUtils struct {
-	SitesReader qor.SitesReaderInterface
+	SitesReader core.SitesReaderInterface
 }
 
-func (cu *CmdUtils) Site(command *cobra.Command, run ...func(cmd *cobra.Command, site qor.SiteInterface, args []string) error) *cobra.Command {
+func (cu *CmdUtils) Site(command *cobra.Command, run ...func(cmd *cobra.Command, site core.SiteInterface, args []string) error) *cobra.Command {
 	Args := command.Args
 	command.Args = func(cmd *cobra.Command, args []string) (err error) {
 		err = cobra.MinimumNArgs(1)(cmd, args)
@@ -37,7 +37,7 @@ func (cu *CmdUtils) Site(command *cobra.Command, run ...func(cmd *cobra.Command,
 	return command
 }
 
-func (cu *CmdUtils) Sites(command *cobra.Command, run ...func(cmd *cobra.Command, site qor.SiteInterface, args []string) error) *cobra.Command {
+func (cu *CmdUtils) Sites(command *cobra.Command, run ...func(cmd *cobra.Command, site core.SiteInterface, args []string) error) *cobra.Command {
 	Args := command.Args
 	command.Args = func(cmd *cobra.Command, args []string) (err error) {
 		if len(args) == 0 {
@@ -54,9 +54,9 @@ func (cu *CmdUtils) Sites(command *cobra.Command, run ...func(cmd *cobra.Command
 	}
 	if len(run) == 1 {
 		command.RunE = func(cmd *cobra.Command, args []string) error {
-			callSite := func(site qor.SiteInterface) error {
+			callSite := func(site core.SiteInterface) error {
 				defer func() {
-					site.EachDB(func(db *qor.DB) bool {
+					site.EachDB(func(db *core.DB) bool {
 						db.Raw.Close()
 						return true
 					})
@@ -69,7 +69,7 @@ func (cu *CmdUtils) Sites(command *cobra.Command, run ...func(cmd *cobra.Command
 			}
 
 			if len(args) == 0 {
-				return cu.SitesReader.Each(func(site qor.SiteInterface) (cont bool, err error) {
+				return cu.SitesReader.Each(func(site core.SiteInterface) (cont bool, err error) {
 					err = callSite(site)
 					return err == nil, err
 				})

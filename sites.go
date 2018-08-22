@@ -8,20 +8,20 @@ import (
 	"github.com/moisespsena/go-default-logger"
 	"github.com/moisespsena/go-path-helpers"
 	"github.com/moisespsena/go-route"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 var log = defaultlogger.NewLogger(path_helpers.GetCalledDir())
 
-type MiddlewareHandler func(context *qor.Context, next func(context *qor.Context))
+type MiddlewareHandler func(context *core.Context, next func(context *core.Context))
 
 type SitesRouter struct {
-	ContextFactory *qor.ContextFactory
+	ContextFactory *core.ContextFactory
 	DefaultDomain  string
 	DefaultPrefix  string
 	ByDomain       bool
-	Sites          qor.SitesReader
-	DomainsMap     map[string]qor.SiteInterface
+	Sites          core.SitesReader
+	DomainsMap     map[string]core.SiteInterface
 	SiteHandler    route.ContextHandler
 	HandleNotFound http.Handler
 	HandleIndex    http.Handler
@@ -29,11 +29,11 @@ type SitesRouter struct {
 	Middlewares    *route.MiddlewaresStack
 }
 
-func NewSites(contextFactory *qor.ContextFactory) *SitesRouter {
+func NewSites(contextFactory *core.ContextFactory) *SitesRouter {
 	return &SitesRouter{
 		ContextFactory: contextFactory,
-		Sites:          make(qor.SitesReader),
-		DomainsMap:     make(map[string]qor.SiteInterface),
+		Sites:          make(core.SitesReader),
+		DomainsMap:     make(map[string]core.SiteInterface),
 		Middlewares:    route.NewMiddlewaresStack(PREFIX + ".Middlewares", true),
 	}
 }
@@ -51,11 +51,11 @@ func (r *SitesRouter) GetMiddleware(name string) *route.Middleware {
 	return r.Middlewares.ByName[name]
 }
 
-func (sites *SitesRouter) Get(name string) qor.SiteInterface {
+func (sites *SitesRouter) Get(name string) core.SiteInterface {
 	return sites.Sites[name]
 }
 
-func (sites *SitesRouter) GetByDomain(host string) (site qor.SiteInterface) {
+func (sites *SitesRouter) GetByDomain(host string) (site core.SiteInterface) {
 	// host:port
 	parts := strings.SplitN(host, ":", 2)
 	if len(parts) != 2 {
@@ -93,7 +93,7 @@ func (sites *SitesRouter) GetByDomain(host string) (site qor.SiteInterface) {
 	return
 }
 
-func (sites *SitesRouter) Each(cb func(qor.SiteInterface) bool) bool {
+func (sites *SitesRouter) Each(cb func(core.SiteInterface) bool) bool {
 	for _, site := range sites.Sites {
 		if !cb(site) {
 			return false
@@ -102,8 +102,8 @@ func (sites *SitesRouter) Each(cb func(qor.SiteInterface) bool) bool {
 	return true
 }
 
-func (sites *SitesRouter) EachSite(cb func(site qor.SiteInterface) error) error {
-	sites.Each(func(site qor.SiteInterface) bool {
+func (sites *SitesRouter) EachSite(cb func(site core.SiteInterface) error) error {
+	sites.Each(func(site core.SiteInterface) bool {
 		err := cb(site)
 		if err != nil {
 			panic(err)
@@ -114,8 +114,8 @@ func (sites *SitesRouter) EachSite(cb func(site qor.SiteInterface) error) error 
 	return nil
 }
 
-func (sites *SitesRouter) SetupDB(setup func(db *qor.DB) error) (err error) {
-	sites.Each(func(site qor.SiteInterface) bool {
+func (sites *SitesRouter) SetupDB(setup func(db *core.DB) error) (err error) {
+	sites.Each(func(site core.SiteInterface) bool {
 		err = site.SetupDB(setup)
 		if err != nil {
 			return false
@@ -125,8 +125,8 @@ func (sites *SitesRouter) SetupDB(setup func(db *qor.DB) error) (err error) {
 	return
 }
 
-func (sites *SitesRouter) SetupSystemDB(setup func(db *qor.DB) error) (err error) {
-	sites.EachSystemDBs(func(db *qor.DB) bool {
+func (sites *SitesRouter) SetupSystemDB(setup func(db *core.DB) error) (err error) {
+	sites.EachSystemDBs(func(db *core.DB) bool {
 		err = setup(db)
 		if err != nil {
 			return false
@@ -140,15 +140,15 @@ func SiteStorageName(siteName, storageName string) string {
 	return siteName + ":" + siteName
 }
 
-func (sites *SitesRouter) Register(site qor.SiteInterface) {
+func (sites *SitesRouter) Register(site core.SiteInterface) {
 	sites.Sites[site.Name()] = site
 	for _, domain := range site.Config().Domains {
 		sites.DomainsMap[domain] = site
 	}
 }
 
-func (sites *SitesRouter) EachSystemDBs(f func(db *qor.DB) bool) bool {
-	return sites.Each(func(site qor.SiteInterface) bool {
+func (sites *SitesRouter) EachSystemDBs(f func(db *core.DB) bool) bool {
+	return sites.Each(func(site core.SiteInterface) bool {
 		if !f(site.GetSystemDB()) {
 			return false
 		}
@@ -156,8 +156,8 @@ func (sites *SitesRouter) EachSystemDBs(f func(db *qor.DB) bool) bool {
 	})
 }
 
-func (sites *SitesRouter) EachDBByName(dbname string, f func(db *qor.DB) bool) bool {
-	return sites.Each(func(site qor.SiteInterface) bool {
+func (sites *SitesRouter) EachDBByName(dbname string, f func(db *core.DB) bool) bool {
+	return sites.Each(func(site core.SiteInterface) bool {
 		if db := site.GetDB(dbname); db != nil {
 			if !f(db) {
 				return false
@@ -178,7 +178,7 @@ type SitesIndex struct {
 	URI          string
 	ExcludeSites []string
 	excludes     map[string]bool
-	Handler      func(sites []qor.SiteInterface, w http.ResponseWriter, r *http.Request)
+	Handler      func(sites []core.SiteInterface, w http.ResponseWriter, r *http.Request)
 }
 
 func (si *SitesIndex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -192,7 +192,7 @@ func (si *SitesIndex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var sites []qor.SiteInterface
+	var sites []core.SiteInterface
 	for _, site := range si.Router.Sites.Sorted() {
 		if _, ok := si.excludes[site.Name()]; !ok {
 			sites = append(sites, site)

@@ -1,7 +1,7 @@
 package sites
 
 import (
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 	"github.com/aghape/db"
 	"github.com/aghape/plug"
 )
@@ -24,7 +24,7 @@ func (p *Plugin) ProvideOptions() []string {
 
 type SiteEvent struct {
 	plug.PluginEventInterface
-	Site        qor.SiteInterface
+	Site        core.SiteInterface
 	PluginEvent plug.PluginEventInterface
 }
 
@@ -36,34 +36,34 @@ func ESite(name string) string {
 }
 
 func (p *Plugin) Init(options *plug.Options) {
-	cf := options.GetInterface(p.ContextFactoryKey).(*qor.ContextFactory)
+	cf := options.GetInterface(p.ContextFactoryKey).(*core.ContextFactory)
 	sites := NewSites(cf)
 	options.Set(p.SitesRouterKey, sites)
 	options.Set(p.SitesReaderKey, sites.Sites)
 }
 
-func (p *Plugin) makeEventDB(ename string, site qor.SiteInterface, DB *qor.DB) plug.EventInterface {
+func (p *Plugin) makeEventDB(ename string, site core.SiteInterface, DB *core.DB) plug.EventInterface {
 	return &db.DBEvent{plug.NewPluginEvent(ename, site), DB}
 }
 
-func (p *Plugin) makeEventGorm(ename string, site qor.SiteInterface, DB *qor.DB) plug.EventInterface {
+func (p *Plugin) makeEventGorm(ename string, site core.SiteInterface, DB *core.DB) plug.EventInterface {
 	return &db.GormDBEvent{plug.NewPluginEvent(ename, site), DB.DB}
 }
 
-func (p *Plugin) do(ename func(name string) string, makeEvent func(ename string, site qor.SiteInterface, DB *qor.DB) plug.EventInterface) func(e plug.PluginEventInterface) (err error) {
+func (p *Plugin) do(ename func(name string) string, makeEvent func(ename string, site core.SiteInterface, DB *core.DB) plug.EventInterface) func(e plug.PluginEventInterface) (err error) {
 	return func(e plug.PluginEventInterface) (err error) {
 		sites := e.Options().GetInterface(p.SitesRouterKey).(*SitesRouter)
 		dis := e.PluginDispatcher()
 		dbNames := p.GetNames()
 		if len(dbNames) == 0 {
-			sites.Each(func(site qor.SiteInterface) bool {
-				return site.EachDB(func(DB *qor.DB) bool {
+			sites.Each(func(site core.SiteInterface) bool {
+				return site.EachDB(func(DB *core.DB) bool {
 					err = dis.TriggerPlugins(makeEvent(ename(DB.Name), site, DB))
 					return err == nil
 				})
 			})
 		} else {
-			sites.Each(func(site qor.SiteInterface) bool {
+			sites.Each(func(site core.SiteInterface) bool {
 				for _, dbName := range dbNames {
 					if DB := site.GetDB(dbName); DB != nil {
 						err = dis.TriggerPlugins(makeEvent(ename(DB.Name), site, DB))
@@ -91,7 +91,7 @@ func (p *Plugin) OnRegister() {
 	p.On(plug.E_POST_INIT, func(e plug.PluginEventInterface) (err error) {
 		sites := e.Options().GetInterface(p.SitesRouterKey).(*SitesRouter)
 		dis := e.PluginDispatcher()
-		sites.Each(func(site qor.SiteInterface) bool {
+		sites.Each(func(site core.SiteInterface) bool {
 			err = dis.TriggerPlugins(&SiteEvent{plug.NewPluginEvent(ESite(site.Name())), site, e})
 			return err == nil
 		})

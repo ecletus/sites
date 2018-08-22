@@ -5,8 +5,8 @@ import (
 	"github.com/aghape/auth/providers/github"
 	"github.com/aghape/auth/providers/google"
 	"github.com/aghape/auth/providers/twitter"
-	"github.com/aghape/aghape"
-	qorconfig "github.com/aghape/aghape/config"
+	"github.com/aghape/core"
+	qorconfig "github.com/aghape/core/config"
 )
 
 type SocialAuthConfig struct {
@@ -103,8 +103,8 @@ func (s *SiteConfig) Prepare(siteName string, args *qorconfig.Args) {
 	}
 }
 
-func (s *SiteConfig) CreateSite(cf *qor.ContextFactory) qor.SiteInterface {
-	return qor.NewSite(cf, s.SiteConfig)
+func (s *SiteConfig) CreateSite(cf *core.ContextFactory) core.SiteInterface {
+	return core.NewSite(cf, s.SiteConfig)
 }
 
 type Config struct {

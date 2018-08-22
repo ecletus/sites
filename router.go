@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/moisespsena/go-route"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 )
 
 func (sites *SitesRouter) MountTo(path string, rootMux *http.ServeMux) *SitesRouter {
@@ -18,7 +18,7 @@ func (sites *SitesRouter) Log(prefix string) {
 	if prefix != "" {
 		prefix += "/"
 	}
-	sites.Each(func(site qor.SiteInterface) bool {
+	sites.Each(func(site core.SiteInterface) bool {
 		log.Info("New site:", site.Name(), "mounted on", prefix, sites.Prefix, site.Name())
 		return true
 	})
@@ -39,7 +39,7 @@ func (mux *SitesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (mux *SitesHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
-	var site qor.SiteInterface
+	var site core.SiteInterface
 
 	if !mux.Sinple {
 		path := r.URL.Path
@@ -66,7 +66,7 @@ func (mux *SitesHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request
 				return
 			}
 
-			var ctx *qor.Context
+			var ctx *core.Context
 
 			if len(parts) == 1 {
 				r, ctx = sites.ContextFactory.GetOrNewContextFromRequestPair(w, r)
@@ -103,7 +103,7 @@ func (mux *SitesHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request
 			return
 		}
 	} else {
-		mux.Sites.Each(func(s qor.SiteInterface) bool {
+		mux.Sites.Each(func(s core.SiteInterface) bool {
 			site = s
 			return false
 		})

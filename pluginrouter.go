@@ -3,7 +3,7 @@ package sites
 import (
 	"github.com/moisespsena/go-pluggable"
 	"github.com/aghape/plug"
-	"github.com/aghape/aghape"
+	"github.com/aghape/core"
 	"github.com/aghape/router"
 )
 
@@ -29,8 +29,8 @@ func (p *RouterPlugin) OnRegister(dis pluggable.PluginEventDispatcherInterface) 
 			Handler = Sites.CreateHandler()
 		}
 
-		Sites.Each(func(site qor.SiteInterface) bool {
-			site.(*qor.Site).Handler = Router.Mux
+		Sites.Each(func(site core.SiteInterface) bool {
+			site.(*core.Site).Handler = Router.Mux
 			return true
 		})
 		Handler.Log(Sites.DefaultPrefix)
