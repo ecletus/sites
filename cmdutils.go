@@ -75,6 +75,7 @@ func (cu *CmdUtils) Sites(command *cobra.Command, run ...func(cmd *cobra.Command
 				})
 			} else {
 				site := cu.SitesReader.Get(args[0])
+				args = args[1:]
 				return callSite(site)
 			}
 		}
