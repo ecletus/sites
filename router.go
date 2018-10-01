@@ -20,12 +20,12 @@ func (sites *SitesRouter) Log(prefix string) {
 	}
 	if sites.Alone {
 		sites.Each(func(site core.SiteInterface) bool {
-			log.Info("New site:", site.Name(), "mounted on", prefix+sites.Prefix+site.Name())
+			log.Infof("Site %q mounted on %v", site.Name(), prefix+sites.Prefix)
 			return true
 		})
 	} else {
 		sites.Each(func(site core.SiteInterface) bool {
-			log.Info("New site:", site.Name(), "mounted on", prefix+sites.Prefix+site.Name())
+			log.Infof("Site %q mounted on %v", site.Name(), prefix+sites.Prefix+site.Name())
 			return true
 		})
 	}
