@@ -6,7 +6,7 @@ import (
 	"github.com/aghape/plug"
 )
 
-var E_INIT_SITE = PREFIX + ".init.site"
+var E_INIT_SITE = PKG + ".init.site"
 
 type Plugin struct {
 	db.DBNames
@@ -47,10 +47,14 @@ func (p *Plugin) makeEventDB(ename string, site core.SiteInterface, DB *core.DB)
 }
 
 func (p *Plugin) makeEventGorm(ename string, site core.SiteInterface, DB *core.DB) plug.EventInterface {
-	return &db.GormDBEvent{plug.NewPluginEvent(ename, site), DB.DB}
+	return &db.DBEvent{plug.NewPluginEvent(ename, site), DB}
 }
 
-func (p *Plugin) do(ename func(name string) string, makeEvent func(ename string, site core.SiteInterface, DB *core.DB) plug.EventInterface) func(e plug.PluginEventInterface) (err error) {
+func (p *Plugin) do(ename func(name string) string,
+	makeEvent func(ename string, site core.SiteInterface, DB *core.DB) plug.EventInterface) func(e plug.PluginEventInterface) (err error) {
+	do := func(dis plug.PluginEventDispatcherInterface, site core.SiteInterface, DB *core.DB) (err error) {
+		return dis.TriggerPlugins(makeEvent(ename(DB.Name), site, DB))
+	}
 	return func(e plug.PluginEventInterface) (err error) {
 		sites := e.Options().GetInterface(p.SitesRouterKey).(*SitesRouter)
 		dis := e.PluginDispatcher()
@@ -58,7 +62,7 @@ func (p *Plugin) do(ename func(name string) string, makeEvent func(ename string,
 		if len(dbNames) == 0 {
 			sites.Each(func(site core.SiteInterface) bool {
 				return site.EachDB(func(DB *core.DB) bool {
-					err = dis.TriggerPlugins(makeEvent(ename(DB.Name), site, DB))
+					err = do(dis, site, DB)
 					return err == nil
 				})
 			})
@@ -66,7 +70,7 @@ func (p *Plugin) do(ename func(name string) string, makeEvent func(ename string,
 			sites.Each(func(site core.SiteInterface) bool {
 				for _, dbName := range dbNames {
 					if DB := site.GetDB(dbName); DB != nil {
-						err = dis.TriggerPlugins(makeEvent(ename(DB.Name), site, DB))
+						err = do(dis, site, DB)
 						if err != nil {
 							return false
 						}
@@ -97,9 +101,8 @@ func (p *Plugin) OnRegister() {
 		})
 		return
 	})
+
 	p.On(db.E_INIT_DB, p.doDB(db.EInit))
 	p.On(db.E_INIT_GORM, p.doGorm(db.EInitGorm))
-
 	p.On(db.E_MIGRATE_DB, p.doDB(db.EMigrate))
-	p.On(db.E_MIGRATE_GORM, p.doGorm(db.EMigrateGorm))
 }

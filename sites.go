@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/aghape/core"
 	"github.com/moisespsena/go-default-logger"
 	"github.com/moisespsena/go-path-helpers"
 	"github.com/moisespsena/go-route"
-	"github.com/aghape/core"
 )
 
 var log = defaultlogger.NewLogger(path_helpers.GetCalledDir())
@@ -19,24 +19,47 @@ type SitesRouter struct {
 	ContextFactory *core.ContextFactory
 	DefaultDomain  string
 	DefaultPrefix  string
+	DefaultSite    string
+	Alone          bool
 	ByDomain       bool
 	Sites          core.SitesReader
 	DomainsMap     map[string]core.SiteInterface
 	SiteHandler    route.ContextHandler
-	HandleNotFound http.Handler
-	HandleIndex    http.Handler
+	HandleNotFound route.ContextHandler
+	HandleIndex    route.ContextHandler
 	Prefix         string
 	Middlewares    *route.MiddlewaresStack
 }
 
 func NewSites(contextFactory *core.ContextFactory) *SitesRouter {
-	return &SitesRouter{
+	r := &SitesRouter{
 		ContextFactory: contextFactory,
 		Sites:          make(core.SitesReader),
 		DomainsMap:     make(map[string]core.SiteInterface),
-		Middlewares:    route.NewMiddlewaresStack(PREFIX + ".Middlewares", true),
+		Middlewares:    route.NewMiddlewaresStack(PKG+".Middlewares", true),
+		HandleNotFound: route.HttpHandler(http.NotFoundHandler()),
+	}
+	r.HandleIndex = route.HttpHandler(r.DefaultIndexHandler)
+	return r
+}
+
+func (sr *SitesRouter) DefaultIndexHandler(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
+	if sr.DefaultSite != "" {
+		if site := sr.Get(sr.DefaultSite); site != nil {
+			ContextGetSiteHandler(rctx)(w, r, rctx, site)
+		} else {
+			sr.HandleNotFound.ServeHTTPContext(w, r, rctx)
+		}
+		return
+	}
+
+	if sr.HandleIndex != nil {
+		sr.HandleIndex.ServeHTTPContext(w, r, rctx)
+	} else {
+		sr.HandleNotFound.ServeHTTPContext(w, r, rctx)
 	}
 }
+
 func (r *SitesRouter) SetDefaultPrefix(prefix string) {
 	r.DefaultPrefix = "/" + strings.Trim(prefix, "/")
 }
@@ -181,14 +204,11 @@ type SitesIndex struct {
 	Handler      func(sites []core.SiteInterface, w http.ResponseWriter, r *http.Request)
 }
 
-func (si *SitesIndex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (si *SitesIndex) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
 	if si.excludes == nil {
 		si.excludes = make(map[string]bool)
 		for _, name := range si.ExcludeSites {
 			si.excludes[name] = true
-		}
-		if si.URI == "" {
-			si.URI = si.Router.DefaultPrefix
 		}
 	}
 
@@ -204,6 +224,8 @@ func (si *SitesIndex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pth := strings.TrimSuffix(route.GetOriginalURL(r).Path, "/")
+
 	msg := `<!doctype html>
 <html lang="en">
 <head>
@@ -216,7 +238,7 @@ func (si *SitesIndex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 `
 
 	for _, site := range sites {
-		msg += fmt.Sprintf(`<li><a href="%v/%v">%v</a></li>`, si.URI, site.Name(), site.Name())
+		msg += fmt.Sprintf(`<li><a href="%v/%v">%v</a></li>`, pth, site.Name(), site.Name())
 	}
 
 	msg += `

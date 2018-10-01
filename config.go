@@ -64,7 +64,7 @@ type SiteConfig struct {
 	*AuthConfig
 }
 
-func (s *SiteConfig) Prepare(siteName string, args *qorconfig.Args) {
+func (s *SiteConfig) Prepare(mainConfig *Config, siteName string, args *qorconfig.Args) {
 	if s.SiteConfig == nil {
 		s.SiteConfig = &qorconfig.SiteConfig{siteName, s.Title, s.Domains, s.Db,
 			s.MediaStorage, s.RootDir, s.SMTP, s.OtherConfig, s.PublicURL}
@@ -77,6 +77,29 @@ func (s *SiteConfig) Prepare(siteName string, args *qorconfig.Args) {
 
 	if s.SiteConfig.OtherConfig == nil {
 		s.SiteConfig.OtherConfig = make(qorconfig.OtherConfig)
+	}
+
+	for dbName, db := range s.SiteConfig.Db {
+		if mdb, ok := mainConfig.Db[dbName]; ok {
+			if db.Adapter == "" {
+				db.Adapter = mdb.Adapter
+			}
+			if db.Host == "" {
+				db.Host = mdb.Host
+			}
+			if db.User == "" {
+				db.User = mdb.User
+			}
+			if db.Password == "" {
+				db.Password = mdb.Password
+			}
+			if db.Port == 0 {
+				db.Port = mdb.Port
+			}
+			if db.SSL == "" {
+				db.SSL = mdb.SSL
+			}
+		}
 	}
 
 	s.SiteConfig.Prepare(siteName, args)
@@ -108,11 +131,17 @@ func (s *SiteConfig) CreateSite(cf *core.ContextFactory) core.SiteInterface {
 }
 
 type Config struct {
+	Db            map[string]*qorconfig.DBConfig
 	Host          string `env:"HOST" default:":7000"`
-	Prefix        string `env:"PREFIX"`
+	Prefix        string `env:"AGHAPE_SITES_URI_PREFIX"`
 	Production    bool   `env:"PRODUCTION" default:false`
-	DefaultSite   *SiteConfig
+	DefaultSite   string
 	Sites         map[string]*SiteConfig
-	SiteByDomain  bool   `default:false`
+	SiteByDomain  bool `default:false`
 	DefaultDomain string
+	Alone         bool
+}
+
+func (c *Config) SystemDBAdapter() string {
+	return c.Db["system"].Adapter
 }

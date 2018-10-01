@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/moisespsena/go-error-wrap"
 	"github.com/aghape/core"
+	"github.com/moisespsena/go-error-wrap"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +41,11 @@ func (cu *CmdUtils) Sites(command *cobra.Command, run ...func(cmd *cobra.Command
 	Args := command.Args
 	command.Args = func(cmd *cobra.Command, args []string) (err error) {
 		if len(args) == 0 {
-			return
+			if siteNames := cu.SitesReader.Names(); len(siteNames) == 1 {
+				args = append(args, siteNames[0])
+			} else {
+				return
+			}
 		}
 		if args[0] != "*" && cu.SitesReader.Get(args[0]) == nil {
 			return fmt.Errorf("Site %q does not exists.\n", args[0])

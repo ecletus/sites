@@ -5,5 +5,5 @@ import (
 )
 
 var (
-	PREFIX = path_helpers.GetCalledDir()
+	PKG = path_helpers.GetCalledDir()
 )

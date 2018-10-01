@@ -1,16 +1,16 @@
 package sites
 
 import (
-	"github.com/moisespsena/go-pluggable"
-	"github.com/aghape/plug"
 	"github.com/aghape/core"
+	"github.com/aghape/plug"
 	"github.com/aghape/router"
+	"github.com/moisespsena/go-pluggable"
 )
 
 type RouterPlugin struct {
 	plug.EventDispatcher
 	RouterKey, SitesRouterKey string
-	SingleSite                bool
+	Alone                     bool
 }
 
 func (p *RouterPlugin) RequireOptions() []string {
@@ -23,8 +23,8 @@ func (p *RouterPlugin) OnRegister(dis pluggable.PluginEventDispatcherInterface) 
 		Router := e.Router
 		var Handler *SitesHandler
 
-		if p.SingleSite {
-			Handler = Sites.CreateSimpleHandler()
+		if p.Alone || Sites.Alone {
+			Handler = Sites.CreateAloneHandler()
 		} else {
 			Handler = Sites.CreateHandler()
 		}
