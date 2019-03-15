@@ -4,6 +4,7 @@ import (
 	"github.com/aghape/core"
 	"github.com/aghape/db"
 	"github.com/aghape/plug"
+	"github.com/moisespsena/go-error-wrap"
 )
 
 var E_INIT_SITE = PKG + ".init.site"
@@ -60,23 +61,21 @@ func (p *Plugin) do(ename func(name string) string,
 		dis := e.PluginDispatcher()
 		dbNames := p.GetNames()
 		if len(dbNames) == 0 {
-			sites.Each(func(site core.SiteInterface) bool {
-				return site.EachDB(func(DB *core.DB) bool {
-					err = do(dis, site, DB)
-					return err == nil
+			err = sites.Sites.Each(func(site core.SiteInterface) error {
+				return site.EachDB(func(DB *core.DB) error {
+					return do(dis, site, DB)
 				})
 			})
 		} else {
-			sites.Each(func(site core.SiteInterface) bool {
+			err = sites.Sites.Each(func(site core.SiteInterface) (err error) {
 				for _, dbName := range dbNames {
 					if DB := site.GetDB(dbName); DB != nil {
-						err = do(dis, site, DB)
-						if err != nil {
-							return false
+						if err = do(dis, site, DB); err != nil {
+							return errwrap.Wrap(err, dbName)
 						}
 					}
 				}
-				return true
+				return nil
 			})
 		}
 		return
@@ -95,11 +94,9 @@ func (p *Plugin) OnRegister() {
 	p.On(plug.E_POST_INIT, func(e plug.PluginEventInterface) (err error) {
 		sites := e.Options().GetInterface(p.SitesRouterKey).(*SitesRouter)
 		dis := e.PluginDispatcher()
-		sites.Each(func(site core.SiteInterface) bool {
-			err = dis.TriggerPlugins(&SiteEvent{plug.NewPluginEvent(ESite(site.Name())), site, e})
-			return err == nil
+		return sites.Each(func(site core.SiteInterface) error {
+			return dis.TriggerPlugins(&SiteEvent{plug.NewPluginEvent(ESite(site.Name())), site, e})
 		})
-		return
 	})
 
 	p.On(db.E_INIT_DB, p.doDB(db.EInit))

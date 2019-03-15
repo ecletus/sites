@@ -8,7 +8,7 @@ import (
 	"github.com/aghape/core"
 	"github.com/moisespsena/go-default-logger"
 	"github.com/moisespsena/go-path-helpers"
-	"github.com/moisespsena/go-route"
+	"github.com/moisespsena-go/xroute"
 )
 
 var log = defaultlogger.NewLogger(path_helpers.GetCalledDir())
@@ -24,11 +24,15 @@ type SitesRouter struct {
 	ByDomain       bool
 	Sites          core.SitesReader
 	DomainsMap     map[string]core.SiteInterface
-	SiteHandler    route.ContextHandler
-	HandleNotFound route.ContextHandler
-	HandleIndex    route.ContextHandler
+	SiteHandler    xroute.ContextHandler
+	HandleNotFound xroute.ContextHandler
+	HandleIndex    xroute.ContextHandler
 	Prefix         string
-	Middlewares    *route.MiddlewaresStack
+	Middlewares    *xroute.MiddlewaresStack
+}
+
+func (sr *SitesRouter) All() []core.SiteInterface {
+	return sr.Sites.All()
 }
 
 func NewSites(contextFactory *core.ContextFactory) *SitesRouter {
@@ -36,14 +40,14 @@ func NewSites(contextFactory *core.ContextFactory) *SitesRouter {
 		ContextFactory: contextFactory,
 		Sites:          make(core.SitesReader),
 		DomainsMap:     make(map[string]core.SiteInterface),
-		Middlewares:    route.NewMiddlewaresStack(PKG+".Middlewares", true),
-		HandleNotFound: route.HttpHandler(http.NotFoundHandler()),
+		Middlewares:    xroute.NewMiddlewaresStack(PKG+".Middlewares", true),
+		HandleNotFound: xroute.HttpHandler(http.NotFoundHandler()),
 	}
-	r.HandleIndex = route.HttpHandler(r.DefaultIndexHandler)
+	r.HandleIndex = xroute.HttpHandler(r.DefaultIndexHandler)
 	return r
 }
 
-func (sr *SitesRouter) DefaultIndexHandler(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
+func (sr *SitesRouter) DefaultIndexHandler(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext) {
 	if sr.DefaultSite != "" {
 		if site := sr.Get(sr.DefaultSite); site != nil {
 			ContextGetSiteHandler(rctx)(w, r, rctx, site)
@@ -65,12 +69,12 @@ func (r *SitesRouter) SetDefaultPrefix(prefix string) {
 }
 
 // Use reigster a middleware to the router
-func (r *SitesRouter) Use(middlewares ...*route.Middleware) {
-	r.Middlewares.Add(middlewares, route.DUPLICATION_ABORT)
+func (r *SitesRouter) Use(middlewares ...*xroute.Middleware) {
+	r.Middlewares.Add(middlewares, xroute.DUPLICATION_ABORT)
 }
 
 // GetMiddleware get registered middleware
-func (r *SitesRouter) GetMiddleware(name string) *route.Middleware {
+func (r *SitesRouter) GetMiddleware(name string) *xroute.Middleware {
 	return r.Middlewares.ByName[name]
 }
 
@@ -116,47 +120,8 @@ func (sites *SitesRouter) GetByDomain(host string) (site core.SiteInterface) {
 	return
 }
 
-func (sites *SitesRouter) Each(cb func(core.SiteInterface) bool) bool {
-	for _, site := range sites.Sites {
-		if !cb(site) {
-			return false
-		}
-	}
-	return true
-}
-
-func (sites *SitesRouter) EachSite(cb func(site core.SiteInterface) error) error {
-	sites.Each(func(site core.SiteInterface) bool {
-		err := cb(site)
-		if err != nil {
-			panic(err)
-			return false
-		}
-		return true
-	})
-	return nil
-}
-
-func (sites *SitesRouter) SetupDB(setup func(db *core.DB) error) (err error) {
-	sites.Each(func(site core.SiteInterface) bool {
-		err = site.SetupDB(setup)
-		if err != nil {
-			return false
-		}
-		return true
-	})
-	return
-}
-
-func (sites *SitesRouter) SetupSystemDB(setup func(db *core.DB) error) (err error) {
-	sites.EachSystemDBs(func(db *core.DB) bool {
-		err = setup(db)
-		if err != nil {
-			return false
-		}
-		return true
-	})
-	return
+func (sites *SitesRouter) Each(cb func(core.SiteInterface) error) (err error) {
+	return sites.Sites.Each(cb)
 }
 
 func SiteStorageName(siteName, storageName string) string {
@@ -168,26 +133,6 @@ func (sites *SitesRouter) Register(site core.SiteInterface) {
 	for _, domain := range site.Config().Domains {
 		sites.DomainsMap[domain] = site
 	}
-}
-
-func (sites *SitesRouter) EachSystemDBs(f func(db *core.DB) bool) bool {
-	return sites.Each(func(site core.SiteInterface) bool {
-		if !f(site.GetSystemDB()) {
-			return false
-		}
-		return true
-	})
-}
-
-func (sites *SitesRouter) EachDBByName(dbname string, f func(db *core.DB) bool) bool {
-	return sites.Each(func(site core.SiteInterface) bool {
-		if db := site.GetDB(dbname); db != nil {
-			if !f(db) {
-				return false
-			}
-		}
-		return true
-	})
 }
 
 func (sites *SitesRouter) CreateSitesIndex() *SitesIndex {
@@ -204,7 +149,7 @@ type SitesIndex struct {
 	Handler      func(sites []core.SiteInterface, w http.ResponseWriter, r *http.Request)
 }
 
-func (si *SitesIndex) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
+func (si *SitesIndex) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext) {
 	if si.excludes == nil {
 		si.excludes = make(map[string]bool)
 		for _, name := range si.ExcludeSites {
@@ -224,7 +169,7 @@ func (si *SitesIndex) ServeHTTPContext(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 
-	pth := strings.TrimSuffix(route.GetOriginalURL(r).Path, "/")
+	pth := strings.TrimSuffix(xroute.GetOriginalURL(r).Path, "/")
 
 	msg := `<!doctype html>
 <html lang="en">

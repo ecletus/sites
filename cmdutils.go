@@ -38,31 +38,18 @@ func (cu *CmdUtils) Site(command *cobra.Command, run ...func(cmd *cobra.Command,
 }
 
 func (cu *CmdUtils) Sites(command *cobra.Command, run ...func(cmd *cobra.Command, site core.SiteInterface, args []string) error) *cobra.Command {
-	Args := command.Args
-	command.Args = func(cmd *cobra.Command, args []string) (err error) {
-		if len(args) == 0 {
-			if siteNames := cu.SitesReader.Names(); len(siteNames) == 1 {
-				args = append(args, siteNames[0])
-			} else {
-				return
-			}
-		}
-		if args[0] != "*" && cu.SitesReader.Get(args[0]) == nil {
-			return fmt.Errorf("Site %q does not exists.\n", args[0])
-		}
-
-		if Args != nil {
-			return Args(cmd, args[1:])
-		}
-		return
-	}
 	if len(run) == 1 {
 		command.RunE = func(cmd *cobra.Command, args []string) error {
+			siteName, err := cmd.Flags().GetString("site-name")
+			if err != nil {
+				return err
+			}
+			
 			callSite := func(site core.SiteInterface) error {
 				defer func() {
-					site.EachDB(func(db *core.DB) bool {
+					site.EachDB(func(db *core.DB) error {
 						db.Raw.Close()
-						return true
+						return nil
 					})
 				}()
 				err := run[0](cmd, site, args)
@@ -72,20 +59,14 @@ func (cu *CmdUtils) Sites(command *cobra.Command, run ...func(cmd *cobra.Command
 				return nil
 			}
 
-			if len(args) == 0 {
-				return cu.SitesReader.Each(func(site core.SiteInterface) (cont bool, err error) {
-					err = callSite(site)
-					return err == nil, err
-				})
+			if siteName == "*" {
+				return cu.SitesReader.Each(callSite)
 			} else {
-				site := cu.SitesReader.Get(args[0])
-				args = args[1:]
+				site := cu.SitesReader.Get(siteName)
 				return callSite(site)
 			}
 		}
 	}
-
-	UseParts := strings.Split(command.Use, " ")
-	command.Use = strings.Join(append([]string{UseParts[0], "[SITE_NAME]"}, UseParts[1:]...), " ")
+	command.Flags().String("site-name", "*", "the site name. Use * (asterisk) for all sites")
 	return command
 }

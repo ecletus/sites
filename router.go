@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/aghape/core"
-	"github.com/moisespsena/go-route"
+	"github.com/moisespsena-go/xroute"
 )
 
 func (sites *SitesRouter) MountTo(path string, rootMux *http.ServeMux) *SitesRouter {
@@ -19,21 +19,21 @@ func (sites *SitesRouter) Log(prefix string) {
 		prefix = strings.TrimSuffix(prefix, "/") + "/"
 	}
 	if sites.Alone {
-		sites.Each(func(site core.SiteInterface) bool {
+		sites.Each(func(site core.SiteInterface) error {
 			log.Infof("Site %q mounted on %v", site.Name(), prefix+sites.Prefix)
-			return true
+			return nil
 		})
 	} else {
-		sites.Each(func(site core.SiteInterface) bool {
+		sites.Each(func(site core.SiteInterface) error {
 			log.Infof("Site %q mounted on %v", site.Name(), prefix+sites.Prefix+site.Name())
-			return true
+			return nil
 		})
 	}
 }
 
 type SitesHandler struct {
 	Sites       *SitesRouter
-	middlewares *route.MiddlewaresStack
+	middlewares *xroute.MiddlewaresStack
 	Alone       bool
 }
 
@@ -42,22 +42,22 @@ func (r *SitesHandler) Log(prefix string) {
 }
 
 func (mux *SitesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r, rctx := route.GetOrNewRouteContextForRequest(r)
+	r, rctx := xroute.GetOrNewRouteContextForRequest(r)
 	mux.ServeHTTPContext(w, r, rctx)
 }
 
-func (mux *SitesHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
+func (mux *SitesHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext) {
 	var site core.SiteInterface
 	ContextSetSites(rctx, mux.Sites.Sites)
 	ContextSetSiteHandler(rctx, mux.SiteHandler)
 
 	if mux.Sites.Alone {
-		mux.Sites.Each(func(s core.SiteInterface) bool {
+		mux.Sites.Each(func(s core.SiteInterface) error {
 			site = s
-			return false
+			return core.StopSiteIteration
 		})
 	} else if r.URL.Path == "/" && mux.Sites.DefaultSite != "" {
-		url := *route.GetOriginalURL(r)
+		url := *xroute.GetOriginalURL(r)
 		url.Path = strings.TrimSuffix(url.Path, "/") + "/" + mux.Sites.DefaultSite + "/"
 		us := url.String()
 		http.Redirect(w, r, us, http.StatusSeeOther)
@@ -121,9 +121,9 @@ func (mux *SitesHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request
 	mux.SiteHandler(w, r, rctx, site)
 }
 
-func (mux *SitesHandler) SiteHandler(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext, site core.SiteInterface) {
+func (mux *SitesHandler) SiteHandler(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext, site core.SiteInterface) {
 	ContextSetSite(rctx, site)
-	chain := mux.middlewares.Items.Handler(route.NewContextHandler(func(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext) {
+	chain := mux.middlewares.Items.Handler(xroute.NewContextHandler(func(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext) {
 		site.ServeHTTPContext(w, r, rctx)
 	}))
 
@@ -146,28 +146,28 @@ func (sites *SitesRouter) Mux() *http.ServeMux {
 	return mux
 }
 
-type SiteHandler func(w http.ResponseWriter, r *http.Request, rctx *route.RouteContext, site core.SiteInterface)
+type SiteHandler func(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext, site core.SiteInterface)
 
-func ContextSetSiteHandler(rctx *route.RouteContext, handler SiteHandler) {
+func ContextSetSiteHandler(rctx *xroute.RouteContext, handler SiteHandler) {
 	rctx.Data[PKG+".siteHandler"] = handler
 }
 
-func ContextGetSiteHandler(rctx *route.RouteContext) SiteHandler {
+func ContextGetSiteHandler(rctx *xroute.RouteContext) SiteHandler {
 	return rctx.Data[PKG+".siteHandler"].(SiteHandler)
 }
 
-func ContextSetSite(rctx *route.RouteContext, site core.SiteInterface) {
+func ContextSetSite(rctx *xroute.RouteContext, site core.SiteInterface) {
 	rctx.Data[PKG+".site"] = site
 }
 
-func ContextGetSite(rctx *route.RouteContext) core.SiteInterface {
+func ContextGetSite(rctx *xroute.RouteContext) core.SiteInterface {
 	return rctx.Data[PKG+".site"].(core.SiteInterface)
 }
 
-func ContextSetSites(rctx *route.RouteContext, sites core.SitesReaderInterface) {
+func ContextSetSites(rctx *xroute.RouteContext, sites core.SitesReaderInterface) {
 	rctx.Data[PKG+".sites"] = sites
 }
 
-func ContextGetSites(rctx *route.RouteContext) core.SitesReaderInterface {
+func ContextGetSites(rctx *xroute.RouteContext) core.SitesReaderInterface {
 	return rctx.Data[PKG+".sites"].(core.SitesReaderInterface)
 }

@@ -29,9 +29,11 @@ func (p *RouterPlugin) OnRegister(dis pluggable.PluginEventDispatcherInterface) 
 			Handler = Sites.CreateHandler()
 		}
 
-		Sites.Each(func(site core.SiteInterface) bool {
-			site.(*core.Site).Handler = Router.Mux
-			return true
+		mux := Router.GetRootMux()
+		
+		Sites.Each(func(site core.SiteInterface) error {
+			site.(*core.Site).Handler = mux
+			return nil
 		})
 		Handler.Log(Sites.DefaultPrefix)
 		Router.Handler = Handler

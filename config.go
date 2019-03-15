@@ -7,6 +7,8 @@ import (
 	"github.com/aghape/auth/providers/twitter"
 	"github.com/aghape/core"
 	qorconfig "github.com/aghape/core/config"
+	"github.com/moisespsena-go/stringvar"
+	"github.com/moisespsena/go-error-wrap"
 )
 
 type SocialAuthConfig struct {
@@ -16,7 +18,7 @@ type SocialAuthConfig struct {
 	Twitter  *twitter.Config
 }
 
-func (s *SocialAuthConfig) Prepare(siteName string, args *qorconfig.Args) {
+func (s *SocialAuthConfig) Prepare(siteName string, args *stringvar.StringVar) {
 	if s.Github != nil {
 		s.Github.Name = siteName + "/" + s.Github.GetDefaultName()
 	}
@@ -37,7 +39,7 @@ type AuthConfig struct {
 	SocialAuth        *SocialAuthConfig
 }
 
-func (s *AuthConfig) Prepare(siteName string, args *qorconfig.Args) {
+func (s *AuthConfig) Prepare(siteName string, args *stringvar.StringVar) {
 	if s.SocialAuth != nil {
 		s.SocialAuth.Prepare(siteName, args)
 	}
@@ -49,7 +51,7 @@ type SiteConfig struct {
 	Title        string
 	Domains      []string
 	Db           map[string]*qorconfig.DBConfig
-	MediaStorage map[string]*qorconfig.MediaStorageConfig
+	MediaStorage map[string]map[string]interface{}
 	RootDir      string
 	SMTP         *qorconfig.SMTPConfig
 	PublicURL    string
@@ -64,7 +66,7 @@ type SiteConfig struct {
 	*AuthConfig
 }
 
-func (s *SiteConfig) Prepare(mainConfig *Config, siteName string, args *qorconfig.Args) {
+func (s *SiteConfig) Prepare(mainConfig *Config, siteName string, args *stringvar.StringVar) error {
 	if s.SiteConfig == nil {
 		s.SiteConfig = &qorconfig.SiteConfig{siteName, s.Title, s.Domains, s.Db,
 			s.MediaStorage, s.RootDir, s.SMTP, s.OtherConfig, s.PublicURL}
@@ -102,7 +104,9 @@ func (s *SiteConfig) Prepare(mainConfig *Config, siteName string, args *qorconfi
 		}
 	}
 
-	s.SiteConfig.Prepare(siteName, args)
+	if err := s.SiteConfig.Prepare(siteName, args); err != nil {
+		return errwrap.Wrap(err, "SiteConfig.Prepare")
+	}
 	s.AuthConfig.Prepare(siteName, args)
 
 	oc := s.SiteConfig.OtherConfig
@@ -124,6 +128,7 @@ func (s *SiteConfig) Prepare(mainConfig *Config, siteName string, args *qorconfi
 			})
 		}
 	}
+	return nil
 }
 
 func (s *SiteConfig) CreateSite(cf *core.ContextFactory) core.SiteInterface {
@@ -134,10 +139,10 @@ type Config struct {
 	Db            map[string]*qorconfig.DBConfig
 	Host          string `env:"HOST" default:":7000"`
 	Prefix        string `env:"AGHAPE_SITES_URI_PREFIX"`
-	Production    bool   `env:"PRODUCTION" default:false`
+	Production    bool   `env:"PRODUCTION" default:"false"`
 	DefaultSite   string
 	Sites         map[string]*SiteConfig
-	SiteByDomain  bool `default:false`
+	SiteByDomain  bool `default:"false"`
 	DefaultDomain string
 	Alone         bool
 }
