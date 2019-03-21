@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/aghape/core"
+	"github.com/ecletus/core"
 	"github.com/moisespsena/go-default-logger"
 	"github.com/moisespsena/go-path-helpers"
 	"github.com/moisespsena-go/xroute"

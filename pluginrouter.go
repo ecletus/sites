@@ -1,9 +1,9 @@
 package sites
 
 import (
-	"github.com/aghape/core"
-	"github.com/aghape/plug"
-	"github.com/aghape/router"
+	"github.com/ecletus/core"
+	"github.com/ecletus/plug"
+	"github.com/ecletus/router"
 	"github.com/moisespsena/go-pluggable"
 )
 

@@ -1,12 +1,12 @@
 package sites
 
 import (
-	"github.com/aghape/auth/providers/facebook"
-	"github.com/aghape/auth/providers/github"
-	"github.com/aghape/auth/providers/google"
-	"github.com/aghape/auth/providers/twitter"
-	"github.com/aghape/core"
-	qorconfig "github.com/aghape/core/config"
+	"github.com/ecletus/auth/providers/facebook"
+	"github.com/ecletus/auth/providers/github"
+	"github.com/ecletus/auth/providers/google"
+	"github.com/ecletus/auth/providers/twitter"
+	"github.com/ecletus/core"
+	qorconfig "github.com/ecletus/core/config"
 	"github.com/moisespsena-go/stringvar"
 	"github.com/moisespsena/go-error-wrap"
 )
