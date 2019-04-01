@@ -8,7 +8,7 @@ import (
 	"github.com/ecletus/core"
 	qorconfig "github.com/ecletus/core/config"
 	"github.com/moisespsena-go/stringvar"
-	"github.com/moisespsena/go-error-wrap"
+	"github.com/moisespsena-go/error-wrap"
 )
 
 type SocialAuthConfig struct {
