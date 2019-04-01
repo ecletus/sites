@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/ecletus/core"
+	"github.com/moisespsena-go/httpu"
 	"github.com/moisespsena-go/xroute"
 )
 
 func (sites *SitesRouter) MountTo(path string, rootMux *http.ServeMux) *SitesRouter {
-	sites.Prefix = path
 	rootMux.Handle(path, sites.Mux())
 	return sites
 }
@@ -20,12 +20,12 @@ func (sites *SitesRouter) Log(prefix string) {
 	}
 	if sites.Alone {
 		sites.Each(func(site core.SiteInterface) error {
-			log.Infof("Site %q mounted on %v", site.Name(), prefix+sites.Prefix)
+			log.Infof("Site %q mounted on %v", site.Name(), prefix)
 			return nil
 		})
 	} else {
 		sites.Each(func(site core.SiteInterface) error {
-			log.Infof("Site %q mounted on %v", site.Name(), prefix+sites.Prefix+site.Name())
+			log.Infof("Site %q mounted on %v", site.Name(), prefix+site.Name())
 			return nil
 		})
 	}
@@ -56,59 +56,29 @@ func (mux *SitesHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request
 			site = s
 			return core.StopSiteIteration
 		})
-	} else if r.URL.Path == "/" && mux.Sites.DefaultSite != "" {
-		url := *xroute.GetOriginalURL(r)
-		url.Path = strings.TrimSuffix(url.Path, "/") + "/" + mux.Sites.DefaultSite + "/"
-		us := url.String()
-		http.Redirect(w, r, us, http.StatusSeeOther)
+	} else if path := r.URL.Path; path == "/" {
+		if mux.Sites.DefaultSite != "" {
+			http.Redirect(w, r, path+mux.Sites.DefaultSite+"/", http.StatusSeeOther)
+		} else if mux.Sites.HandleIndex != nil {
+			mux.Sites.HandleIndex.ServeHTTPContext(w, r, rctx)
+		} else {
+			mux.Sites.HandleNotFound.ServeHTTPContext(w, r, rctx)
+		}
+		return
+	} else if path == "/favicon.ico" {
+		http.NotFound(w, r)
 		return
 	} else {
-		path := r.URL.Path
 		sites := mux.Sites
-
-		if path == "/favicon.ico" {
-			http.NotFound(w, r)
-			return
-		}
-
 		site = sites.GetByDomain(r.Host)
 
 		if site == nil {
-			path = strings.TrimPrefix(path, sites.DefaultPrefix)
-			parts := strings.SplitN(strings.TrimLeft(path, "/"), "/", 2)
-
-			if len(parts) == 0 {
-				if sites.HandleIndex != nil {
-					sites.HandleIndex.ServeHTTPContext(w, r, rctx)
-				} else if sites.HandleNotFound != nil {
-					sites.HandleNotFound.ServeHTTPContext(w, r, rctx)
-				}
-				return
-			}
-
-			var ctx *core.Context
-
-			if len(parts) == 1 {
-				r, ctx = sites.ContextFactory.GetOrNewContextFromRequestPair(w, r)
-				url := ctx.GenURL(parts[0]) + "/"
-				if url == path {
-					if sites.HandleIndex != nil {
-						sites.HandleIndex.ServeHTTPContext(w, r, rctx)
-					} else {
-						sites.HandleNotFound.ServeHTTPContext(w, r, rctx)
-					}
-					return
-				}
-				http.Redirect(w, r, url, http.StatusPermanentRedirect)
-				return
-			}
-
+			parts := strings.SplitN(strings.Trim(path, "/"), "/", 2)
 			siteName := parts[0]
-
 			site = sites.Get(siteName)
 			if site != nil {
 				r.URL.Path = strings.TrimPrefix(r.URL.Path, "/"+siteName)
-				r = sites.ContextFactory.SetSkipPrefixToRequest(r, sites.DefaultPrefix+"/"+siteName)
+				r = httpu.PushPrefixR(r, siteName)
 			}
 		}
 

@@ -30,12 +30,16 @@ func (p *RouterPlugin) OnRegister(dis pluggable.PluginEventDispatcherInterface) 
 		}
 
 		mux := Router.GetRootMux()
-		
+
 		Sites.Each(func(site core.SiteInterface) error {
 			site.(*core.Site).Handler = mux
 			return nil
 		})
-		Handler.Log(Sites.DefaultPrefix)
+		prefix := Router.Server().Config.Prefix
+		if prefix == "" {
+			prefix = "/"
+		}
+		Handler.Log(prefix)
 		Router.Handler = Handler
 	})
 }

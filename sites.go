@@ -18,7 +18,6 @@ type MiddlewareHandler func(context *core.Context, next func(context *core.Conte
 type SitesRouter struct {
 	ContextFactory *core.ContextFactory
 	DefaultDomain  string
-	DefaultPrefix  string
 	DefaultSite    string
 	Alone          bool
 	ByDomain       bool
@@ -27,7 +26,6 @@ type SitesRouter struct {
 	SiteHandler    xroute.ContextHandler
 	HandleNotFound xroute.ContextHandler
 	HandleIndex    xroute.ContextHandler
-	Prefix         string
 	Middlewares    *xroute.MiddlewaresStack
 }
 
@@ -62,10 +60,6 @@ func (sr *SitesRouter) DefaultIndexHandler(w http.ResponseWriter, r *http.Reques
 	} else {
 		sr.HandleNotFound.ServeHTTPContext(w, r, rctx)
 	}
-}
-
-func (r *SitesRouter) SetDefaultPrefix(prefix string) {
-	r.DefaultPrefix = "/" + strings.Trim(prefix, "/")
 }
 
 // Use reigster a middleware to the router
@@ -169,7 +163,7 @@ func (si *SitesIndex) ServeHTTPContext(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 
-	pth := strings.TrimSuffix(xroute.GetOriginalURL(r).Path, "/")
+	pth := strings.TrimSuffix(r.RequestURI, "/")
 
 	msg := `<!doctype html>
 <html lang="en">
@@ -183,7 +177,7 @@ func (si *SitesIndex) ServeHTTPContext(w http.ResponseWriter, r *http.Request, r
 `
 
 	for _, site := range sites {
-		msg += fmt.Sprintf(`<li><a href="%v/%v">%v</a></li>`, pth, site.Name(), site.Name())
+		msg += fmt.Sprintf(`<li><a href="%v/%v/">%v</a></li>`, pth, site.Name(), site.Name())
 	}
 
 	msg += `
