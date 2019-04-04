@@ -4,7 +4,7 @@ import (
 	"github.com/ecletus/core"
 	"github.com/ecletus/plug"
 	"github.com/ecletus/router"
-	"github.com/moisespsena/go-pluggable"
+	"github.com/moisespsena-go/pluggable"
 )
 
 type RouterPlugin struct {
