@@ -4,7 +4,6 @@ import (
 	"github.com/ecletus/core"
 	"github.com/ecletus/plug"
 	"github.com/ecletus/router"
-	"github.com/moisespsena-go/pluggable"
 )
 
 type RouterPlugin struct {
@@ -14,32 +13,32 @@ type RouterPlugin struct {
 }
 
 func (p *RouterPlugin) RequireOptions() []string {
-	return []string{p.SitesRouterKey}
+	return []string{p.RouterKey, p.SitesRouterKey}
 }
 
-func (p *RouterPlugin) OnRegister(dis pluggable.PluginEventDispatcherInterface) {
+func (p *RouterPlugin) OnRegister() {
 	router.OnRoute(p, func(e *router.RouterEvent) {
-		Sites := e.Options().GetInterface(p.SitesRouterKey).(*SitesRouter)
+		sitesRouter := e.Options().GetInterface(p.SitesRouterKey).(*SitesRouter)
 		Router := e.Router
 		var Handler *SitesHandler
 
-		if p.Alone || Sites.Alone {
-			Handler = Sites.CreateAloneHandler()
+		if p.Alone || sitesRouter.Register.Alone {
+			Handler = sitesRouter.CreateAloneHandler()
 		} else {
-			Handler = Sites.CreateHandler()
+			Handler = sitesRouter.CreateHandler()
 		}
 
-		mux := Router.GetRootMux()
-
-		Sites.Each(func(site core.SiteInterface) error {
-			site.(*core.Site).Handler = mux
-			return nil
+		mux := Router.GetMux()
+		sitesRouter.Register.OnAdd(func(site *core.Site) {
+			if len(site.Middlewares) > 0 {
+				site.SetHandler(site.Middlewares.Handler(mux))
+			} else {
+				site.SetHandler(mux)
+			}
 		})
-		prefix := Router.Server().Config.Prefix
-		if prefix == "" {
-			prefix = "/"
-		}
-		Handler.Log(prefix)
+		sitesRouter.Register.OnSiteDestroy(func(site *core.Site) {
+			site.SetHandler(nil)
+		})
 		Router.Handler = Handler
 	})
 }

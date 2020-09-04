@@ -1,143 +1,205 @@
 package sites
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"path"
+	"sort"
 	"strings"
 
+	"github.com/moisespsena-go/middleware"
+
 	"github.com/ecletus/core"
-	"github.com/moisespsena-go/httpu"
+	defaultlogger "github.com/moisespsena-go/default-logger"
+	path_helpers "github.com/moisespsena-go/path-helpers"
 	"github.com/moisespsena-go/xroute"
 )
 
-func (sites *SitesRouter) MountTo(path string, rootMux *http.ServeMux) *SitesRouter {
-	rootMux.Handle(path, sites.Mux())
-	return sites
+var log = defaultlogger.GetOrCreateLogger(path_helpers.GetCalledDir())
+
+type MiddlewareHandler func(context *core.Context, next func(context *core.Context))
+
+type SitesRouter struct {
+	Prefix                      string
+	NotMountNames               bool
+	RedirectSiteNotFoundToIndex bool
+	ContextFactory              *core.ContextFactory
+	DefaultDomain               string
+	DefaultSite                 string
+	Register                    *core.SitesRegister
+	SiteHandler                 xroute.ContextHandler
+	HandleNotFound              xroute.ContextHandler
+	HandleIndex                 xroute.ContextHandler
+	Middlewares                 *xroute.MiddlewaresStack
 }
 
-func (sites *SitesRouter) Log(prefix string) {
-	if prefix != "" {
-		prefix = strings.TrimSuffix(prefix, "/") + "/"
+func NewSitesRouter(register *core.SitesRegister, contextFactory *core.ContextFactory) *SitesRouter {
+	r := &SitesRouter{
+		ContextFactory: contextFactory,
+		Register:       register,
+		Middlewares:    xroute.NewMiddlewaresStack(PKG+".Middlewares", true),
+		HandleNotFound: xroute.HttpHandler(http.NotFoundHandler()),
 	}
-	if sites.Alone {
-		sites.Each(func(site core.SiteInterface) error {
-			log.Infof("Site %q mounted on %v", site.Name(), prefix)
-			return nil
+	r.HandleIndex = xroute.HttpHandler(r.DefaultIndexHandler)
+	return r
+}
+
+func (this *SitesRouter) Init() {
+	if !this.Register.Alone {
+		this.Register.OnPathAdd(func(site *core.Site, pth string) {
+			log.Infof("[%s] path: mounted on %s", site.Name(), path.Join("/", this.Prefix, pth))
 		})
-	} else {
-		sites.Each(func(site core.SiteInterface) error {
-			log.Infof("Site %q mounted on %v", site.Name(), prefix+site.Name())
-			return nil
+		this.Register.OnPathDel(func(site *core.Site, pth string) {
+			log.Infof("[%s] path: ummounted from %s", site.Name(), path.Join("/", this.Prefix, pth))
 		})
 	}
+	this.Register.OnHostAdd(func(site *core.Site, host string) {
+		log.Infof("[%s] host: mounted on %s", site.Name(), host)
+	})
+	this.Register.OnHostDel(func(site *core.Site, host string) {
+		log.Infof("[%s] host: ummounted from %s", site.Name(), host)
+	})
+	this.Register.OnAdd(func(site *core.Site) {
+		log.Infof("[%s] added", site.Name())
+
+		fmtr := site.RequestLogger("log/http")
+		if fmtr == nil {
+			fmtr = middleware.DefaultRequestLogFormatter
+		}
+		site.Middlewares.Add(xroute.NewMiddleware(func(next http.Handler) http.Handler {
+			next = middleware.RequestLogger(fmtr)(next)
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				r = r.WithContext(context.WithValue(r.Context(), xroute.SkipRequestLogger, true))
+				next.ServeHTTP(w, r)
+			})
+		}))
+		site.Middlewares.Add(xroute.NewMiddleware(func(next http.Handler) http.Handler {
+			next = middleware.Recoverer(fmtr)(next)
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				r = r.WithContext(context.WithValue(r.Context(), xroute.SkipErrorInterseption, true))
+				next.ServeHTTP(w, r)
+			})
+		}))
+	})
+	this.Register.OnSiteDestroy(func(site *core.Site) {
+		log.Infof("[%s] deleted", site.Name())
+	})
+	this.Register.OnPostAdd(func(site *core.Site) {
+		if !this.NotMountNames {
+			this.Register.AddPath(site.Name(), site.Name())
+		}
+	})
 }
 
-type SitesHandler struct {
-	Sites       *SitesRouter
-	middlewares *xroute.MiddlewaresStack
-	Alone       bool
-}
-
-func (r *SitesHandler) Log(prefix string) {
-	r.Sites.Log(prefix)
-}
-
-func (mux *SitesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r, rctx := xroute.GetOrNewRouteContextForRequest(r)
-	mux.ServeHTTPContext(w, r, rctx)
-}
-
-func (mux *SitesHandler) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext) {
-	var site core.SiteInterface
-	ContextSetSites(rctx, mux.Sites.Sites)
-	ContextSetSiteHandler(rctx, mux.SiteHandler)
-
-	if mux.Sites.Alone {
-		mux.Sites.Each(func(s core.SiteInterface) error {
-			site = s
-			return core.StopSiteIteration
-		})
-	} else if path := r.URL.Path; path == "/" {
-		if mux.Sites.DefaultSite != "" {
-			http.Redirect(w, r, path+mux.Sites.DefaultSite+"/", http.StatusSeeOther)
-		} else if mux.Sites.HandleIndex != nil {
-			mux.Sites.HandleIndex.ServeHTTPContext(w, r, rctx)
+func (this *SitesRouter) DefaultIndexHandler(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext) {
+	if this.DefaultSite != "" {
+		if site, ok := this.Register.Get(this.DefaultSite); ok {
+			ContextGetSiteHandler(rctx)(w, r, rctx, site)
 		} else {
-			mux.Sites.HandleNotFound.ServeHTTPContext(w, r, rctx)
+			this.HandleNotFound.ServeHTTPContext(w, r, rctx)
 		}
 		return
-	} else if path == "/favicon.ico" {
-		http.NotFound(w, r)
-		return
-	} else {
-		sites := mux.Sites
-		site = sites.GetByDomain(r.Host)
+	}
 
-		if site == nil {
-			parts := strings.SplitN(strings.Trim(path, "/"), "/", 2)
-			siteName := parts[0]
-			site = sites.Get(siteName)
-			if site != nil {
-				r.URL.Path = strings.TrimPrefix(r.URL.Path, "/"+siteName)
-				r = httpu.PushPrefixR(r, siteName)
-			}
-		}
+	this.HandleNotFound.ServeHTTPContext(w, r, rctx)
+}
 
-		if site == nil {
-			sites.HandleNotFound.ServeHTTPContext(w, r, rctx)
+// Use reigster a middleware to the router
+func (this *SitesRouter) Use(middlewares ...*xroute.Middleware) {
+	this.Middlewares.Add(middlewares, xroute.DUPLICATION_ABORT)
+}
+
+// GetMiddleware get registered middleware
+func (this *SitesRouter) GetMiddleware(name string) *xroute.Middleware {
+	return this.Middlewares.ByName[name]
+}
+
+func (this *SitesRouter) GetByHost(host string) (site *core.Site) {
+	// host:port
+	parts := strings.SplitN(host, ":", 2)
+	if len(parts) == 1 {
+		var ok bool
+		// by host
+		if site, ok = this.Register.GetByHost(host); ok {
 			return
 		}
 	}
-
-	mux.SiteHandler(w, r, rctx, site)
+	return
+}
+func (this *SitesRouter) CreateSitesIndex() *SitesIndex {
+	return &SitesIndex{Router: this, PageTitle: "Site chooser"}
 }
 
-func (mux *SitesHandler) SiteHandler(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext, site core.SiteInterface) {
-	ContextSetSite(rctx, site)
-	chain := mux.middlewares.Items.Handler(xroute.NewContextHandler(func(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext) {
-		site.ServeHTTPContext(w, r, rctx)
-	}))
-
-	chain.ServeHTTPContext(w, r, rctx)
+func SiteStorageName(siteName, storageName string) string {
+	return siteName + ":" + siteName
 }
 
-func (sites *SitesRouter) CreateHandler() *SitesHandler {
-	return &SitesHandler{sites, sites.Middlewares.Build(), false}
+type SitesIndex struct {
+	Router       *SitesRouter
+	PageTitle    string
+	StatusCode   int
+	URI          string
+	ExcludeSites []string
+	excludes     map[string]bool
+	Handler      func(sites []*core.Site, w http.ResponseWriter, r *http.Request)
 }
 
-func (sites *SitesRouter) CreateAloneHandler() *SitesHandler {
-	h := sites.CreateHandler()
-	h.Alone = true
-	return h
-}
+func (this *SitesIndex) ServeHTTPContext(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext) {
+	if this.excludes == nil {
+		this.excludes = make(map[string]bool)
+		for _, name := range this.ExcludeSites {
+			this.excludes[name] = true
+		}
+	}
 
-func (sites *SitesRouter) Mux() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.Handle("/", sites.CreateHandler())
-	return mux
-}
+	var sites []*core.Site
+	for _, site := range this.Router.Register.ByName.Sorted() {
+		if _, ok := this.excludes[site.Name()]; !ok {
+			sites = append(sites, site)
+		}
+	}
 
-type SiteHandler func(w http.ResponseWriter, r *http.Request, rctx *xroute.RouteContext, site core.SiteInterface)
+	if this.Handler != nil {
+		this.Handler(sites, w, r)
+		return
+	}
 
-func ContextSetSiteHandler(rctx *xroute.RouteContext, handler SiteHandler) {
-	rctx.Data[PKG+".siteHandler"] = handler
-}
+	pth := strings.TrimSuffix(r.RequestURI, "/")
 
-func ContextGetSiteHandler(rctx *xroute.RouteContext) SiteHandler {
-	return rctx.Data[PKG+".siteHandler"].(SiteHandler)
-}
+	msg := `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>` + this.PageTitle + `</title>
+</head>
+<body>
+<h1>` + this.PageTitle + `</h1>
+<ul>
+`
 
-func ContextSetSite(rctx *xroute.RouteContext, site core.SiteInterface) {
-	rctx.Data[PKG+".site"] = site
-}
+	for _, site := range sites {
+		msg += fmt.Sprintf(`<li><a href="%v/%v/">%v</a></li>`, pth, site.Name(), site.Name())
+	}
 
-func ContextGetSite(rctx *xroute.RouteContext) core.SiteInterface {
-	return rctx.Data[PKG+".site"].(core.SiteInterface)
-}
+	paths := this.Router.Register.ByPath.Keys()
+	sort.Strings(paths)
 
-func ContextSetSites(rctx *xroute.RouteContext, sites core.SitesReaderInterface) {
-	rctx.Data[PKG+".sites"] = sites
-}
+	for _, sitePth := range paths {
+		if site, ok := this.Router.Register.GetByPath(sitePth); ok {
+			msg += fmt.Sprintf(`<li><a href="%v/%v/">%v</a></li>`, pth, sitePth, site.Name())
+		}
+	}
 
-func ContextGetSites(rctx *xroute.RouteContext) core.SitesReaderInterface {
-	return rctx.Data[PKG+".sites"].(core.SitesReaderInterface)
+	msg += `
+</ul>
+</body>
+</html>`
+
+	stausCode := this.StatusCode
+	if stausCode == 0 {
+		stausCode = 200
+	}
+	w.WriteHeader(stausCode)
+	w.Write([]byte(msg))
 }
